@@ -1,0 +1,414 @@
+---
+title: "Estudo baseado em uma lista de itens perdidos da bagagem no aeroporto em 2014"
+author: "Daniel Castro de Farias"
+date: "21/06/2021"
+output: 
+  rmdformats::material:
+    thumbnails: true
+    background-color: #FFFFFF
+    code_folding: hide
+---
+```{css, echo = F}
+div.header-panel {
+   background-color: #000080;
+}
+```
+
+# Introdução: {.tabset}
+Sentimos diariamente o medo imediato quando percebemos que perdemos alguma coisa. Este fato tende a ocorrer com uma maior frequência quando relacionado à pessoas que costumam viajar regularmente, devido a pressa dos passageiros se esforçando para chegar ao seu destino a tempo de embarcar no horário previsto. Em virtude de uma grande demanda de embarques e desembarques nos aeroportos, pode-se observar que esse ocorrido de “desaparecimento de bagagem” é mais frequente. A TSA estima que cerca de 100 mil itens são deixados para trás nos postos de controle a cada mês, perder algo em um ponto de verificação da TSA pode resultar no melhor cenário possível, desde que seja perceptível o que está lhe faltando antes de embarcar no voo. Os agentes da TSA são treinados para lidar com itens esquecidos, e em aeroportos menores, eles podem temporariamente manter seus objetos de valor para o lado, esperando que você volte rapidamente para reivindicá-los. Baseado nisso, nesse projeto será feita uma análise dos dados de bagagens perdidas no ano de 2014, analisando seu custo aproximado por categoria, tempo de retenção no aeroporto e a média de pessoas que reivindicaram seus itens, bem como pessoas que abriram mão dos produtos.
+
+# Pacotes Requeridos: {.tabset}
+```{r, warning = F, message=F, class.source = "fold-show"}
+library(rmdformats) #Design do documento
+library(ggplot2) #Plotar gráficos
+library(dplyr) #Manipulação de tabelas
+library(DT) #Interatividade
+library(knitr) #Gerar tabelas
+library(tidyr) #Manipulação de tabelas
+library(readxl) #Ler arquivos xls
+```
+
+# Preparação dos dados: {.tabset}
+
+## Origem dos dados
+
+https://www.dhs.gov/sites/default/files/publications/claims-2014.xls
+
+https://www.reddit.com/r/datasets/comments/5pn2re/tsa_claims_data_a_list_of_everything_lost_in/
+
+## Informações sobre os dados
+
+Os dados foram fornecidos através da plataforma do Reddit, são dados coletados no ano de 2014 com finalidade de estabelecer a transparência dos itens perdidos da bagagem em aeroportos e suas categorias de custo. Os dados originais (antes de ser tratados) possuem 8856 linhas e 11 colunas em um formato inicial “.xls”, os valores ausentes estavam representados pelo caractere “-“.
+
+## Importação e limpeza dos dados
+
+**Inicialmente os dados estavam no formato de planilha Excel ".xls", para importar os arquivos foram utilizados os seguintes comandos:**
+```{r, eval=F, class.source = "fold-show"}
+#Lendo dados de uma planilha excel.
+library(readxl)
+perdidos_2014 <- read_excel("claims_2014.xlsx", 
+    col_types = c("double", "date", "date", 
+        "text", "text", "text", "text", "text", 
+        "text", "float", "text"))
+```
+Foi levado em consideração a conversão para os seus devidos formatos de acordo com as colunas, como por exemplo o formato "date", nas colunas de data do incidente e data do recebimento em formato de data, bem como a conversão do preço estimado de determinado produto para valor decimal, adicionando automaticamente "NA" nos respectivos espaços em branco.
+
+**Em seguida o projeto foi salvo em um arquivo ".csv" para facilitar a manipulação através do R.**
+```{r, eval=F, class.source = "fold-show"}
+write.csv(perdidos_2014, file = "projeto.csv", row.names = F)
+```
+
+**Importando o arquivo ".csv"**
+```{r, eval=F, class.source = "fold-show"}
+projeto <- read_csv(file = "projeto.csv")
+```
+
+**Checando se há arquivos duplicados:**
+
+```{r, eval=F, class.source = "fold-show"}
+which(duplicated(projeto))
+```
+
+Apesar de não haver arquivos duplicados, algumas linhas não contêm significância para análise geral dos dados, pois não apresentam o nome do aeroporto, companhia, ou custo relacionados à bagagem esquecida.
+
+**Removendo linhas sem significância:**
+
+```{r, eval=F, class.source = "fold-show"}
+index<-which(projeto$`Airport Name`=="-")
+projeto <- projeto[-index,]
+```
+
+**Padronizando categorias não relatadas para "Other"**
+
+```{r, eval=F, class.source = "fold-show"}
+projeto[which(projeto$`Claim Type` == "-"),7]<- "Other"
+projeto[which(projeto$`Claim Site` == "-"),8]<- "Other"
+projeto[which(projeto$`Item Category` == "-"),9]<- "Other"
+```
+
+**Padronizando as companhias não relatadas para "Not Identified"**
+
+```{r, eval=F, class.source = "fold-show"}
+projeto[which(projeto$`Airline Name` == "-"),6]<- "Not Identified"
+```
+
+**Reestruturando a variável data, para efetuar o cálculo de dias que a mercadoria ficou retida e em seguida criando uma nova coluna armazenando o número de dias de retenção**
+```{r, eval=F, class.source = "fold-show"}
+projeto$`Incident Date`<- as.Date(projeto$`Incident Date`, "%d:%m:%Y")
+projeto <- cbind(projeto, days = (projeto$`Date Received`)-(projeto$`Incident Date`), stringsAsFactors = FALSE)
+```
+
+## Visualização dos dados {.tabset}
+
+**Após realizar algumas manipulações nos dados iniciais, temos os seguintes dados: **
+
+### Dados gerais
+
+```{r, eval=F}
+#Setando dados mais relevantes para a apresentação na tabela.
+main <- projeto %>% select(`Airport Name`, `Airline Name`, `Incident Date`, `Date Received`, `Claim Type`,
+         `Item Category`, days)
+
+main[1:150,] %>% DT::datatable()
+```
+
+```{r, warning=F, message=F, echo=F}
+library(readr)
+projeto <- read_csv(file = "projeto.csv")
+
+index<-which(projeto$`Airport Name`=="-")
+projeto <- projeto[-index,]
+
+projeto[which(projeto$`Claim Type` == "-"),7]<- "Other"
+projeto[which(projeto$`Claim Site` == "-"),8]<- "Other"
+projeto[which(projeto$`Item Category` == "-"),9]<- "Other"
+projeto[which(projeto$`Airline Name` == "-"),6]<- "Not Identified"
+projeto$`Incident Date`<- as.Date(projeto$`Incident Date`, "%d:%m:%Y")
+projeto <- cbind(projeto, days = (projeto$`Date Received`)-(projeto$`Incident Date`), stringsAsFactors = FALSE)
+
+library(knitr)
+library(dplyr)
+library(DT)
+main <- projeto %>% select(`Airport Name`, `Airline Name`, `Incident Date`, `Date Received`, `Claim Type`,
+         `Item Category`, days)
+
+main[1:150,] %>% DT::datatable()
+```
+
+
+
+
+### Dados dos itens com maior custo
+
+```{r, eval=F}
+#Organizando os dados de acordo com os custos mais altos e exibindo na tabela.
+cust<-arrange(cust, desc(`Close Amount`))
+
+cust <- cust %>% select(`Airport Name`, `Airline Name`,`Claim Type`,
+         `Item Category`,days, `Close Amount`)
+
+cust[1:100,] %>% DT::datatable()
+```
+
+
+```{r, warning=F, message=F, echo=F}
+library(readr)
+projeto <- read_csv(file = "projeto.csv")
+
+index<-which(projeto$`Airport Name`=="-")
+projeto <- projeto[-index,]
+
+projeto[which(projeto$`Claim Type` == "-"),7]<- "Other"
+projeto[which(projeto$`Claim Site` == "-"),8]<- "Other"
+projeto[which(projeto$`Item Category` == "-"),9]<- "Other"
+projeto[which(projeto$`Airline Name` == "-"),6]<- "Not Identified"
+projeto$`Incident Date`<- as.Date(projeto$`Incident Date`, "%d:%m:%Y")
+projeto <- cbind(projeto, days = (projeto$`Date Received`)-(projeto$`Incident Date`), stringsAsFactors = FALSE)
+
+library(knitr)
+library(dplyr)
+library(DT)
+library(tidyr)
+
+index2<-which(is.na(projeto$`Close Amount`))
+cust<-projeto[-index2,]
+
+cust<-arrange(cust, desc(`Close Amount`))
+
+cust <- cust %>% select(`Airport Name`, `Airline Name`,`Claim Type`,
+         `Item Category`,days, `Close Amount`)
+
+cust[1:100,] %>% DT::datatable()
+```
+
+### Dados dos Itens com maior tempo de retenção
+
+```{r, eval = F}
+#Organizando os dados de acordo com os maiores números de dias retidos da bagagem.
+timer<-arrange(projeto, desc(days))
+
+timer <- timer %>% select(`Airport Name`,
+         `Item Category`, `Incident Date`,`Date Received`,days)
+
+timer[1:100,] %>% DT::datatable()
+```
+
+
+```{r, warning=F, message=F, echo=F}
+library(readr)
+projeto <- read_csv(file = "projeto.csv")
+
+index<-which(projeto$`Airport Name`=="-")
+projeto <- projeto[-index,]
+
+projeto[which(projeto$`Claim Type` == "-"),7]<- "Other"
+projeto[which(projeto$`Claim Site` == "-"),8]<- "Other"
+projeto[which(projeto$`Item Category` == "-"),9]<- "Other"
+projeto[which(projeto$`Airline Name` == "-"),6]<- "Not Identified"
+projeto$`Incident Date`<- as.Date(projeto$`Incident Date`, "%d:%m:%Y")
+projeto <- cbind(projeto, days = (projeto$`Date Received`)-(projeto$`Incident Date`), stringsAsFactors = FALSE)
+
+library(knitr)
+library(dplyr)
+library(DT)
+library(tidyr)
+
+
+timer<-arrange(projeto, desc(days))
+
+timer <- timer %>% select(`Airport Name`,
+         `Item Category`, `Incident Date`,`Date Received`,days)
+
+timer[1:100,] %>% DT::datatable()
+```
+
+### Dados de aeroportos com maior incidência
+
+```{r, eval = F}
+#Organizando os dados de acordo com os aeroportos que possuem as maiores frequências de perda de bagagem.
+z<- projeto %>% count(`Airport Name`)
+qtd<-arrange(z, desc(n))
+
+qtd[1:50,] %>% DT::datatable()
+```
+
+
+```{r, warning=F, message=F, echo=F}
+library(readr)
+projeto <- read_csv(file = "projeto.csv")
+
+index<-which(projeto$`Airport Name`=="-")
+projeto <- projeto[-index,]
+
+projeto[which(projeto$`Claim Type` == "-"),7]<- "Other"
+projeto[which(projeto$`Claim Site` == "-"),8]<- "Other"
+projeto[which(projeto$`Item Category` == "-"),9]<- "Other"
+projeto[which(projeto$`Airline Name` == "-"),6]<- "Not Identified"
+projeto$`Incident Date`<- as.Date(projeto$`Incident Date`, "%d:%m:%Y")
+projeto <- cbind(projeto, days = (projeto$`Date Received`)-(projeto$`Incident Date`), stringsAsFactors = FALSE)
+
+library(knitr)
+library(dplyr)
+library(DT)
+library(tidyr)
+
+z<- projeto %>% count(`Airport Name`)
+qtd<-arrange(z, desc(n))
+
+qtd[1:50,] %>% DT::datatable()
+```
+
+
+## Resumo
+
+**Detalhamento das variáveis e funcionalidades: **
+
+**Claim Number:** Número de identificação registrado pelo TSA, funcionando de forma semelhante a um ID.
+
+**Date Received:** Data no qual o produto perdido foi devolvido.
+
+**Incident Date:** Data no qual ocorreu o incidente de perda.
+
+**Airport Code**: Sigla do determinado aeroporto correspondente à bagagem perdida.
+
+**Airport Name:** Nome do aeroporto.
+
+**Airline Name:** Nome da companhia.
+
+**Claim type:** Corresponde ao tipo de reclamação.
+
+**Claim Site:** Corresponde ao site da reclamação.
+
+**Item Category:** Corresponde à categoria do item.
+
+**Close Amount:** Corresponde ao preço estimado da bagagem perdida.
+
+**Disposition:** Corresponde ao status da bagagem.
+
+**days:** Dias de retenção de determinada bagagem.
+
+
+# Análise exploratória dos dados: {.tabset}
+
+## As categorias dos itens mais perdidos
+
+Podemos observar que diversos itens de amplas categorias são perdidos da bagagem, devido a esse fato podemos analisar qual categoria de item perdido obtém a maior frequência e com isso questionar o real motivo do acontecimento e tentar elaborar algumas soluções.
+
+```{r, eval=F}
+#Classificando as categorias de itens mais perdidos.
+categ<- projeto %>% count(`Item Category`)
+categ<-arrange(categ, desc(n))
+
+labels <- categ$`Item Category`[1:10]
+x <- categ$n[1:10]
+
+#Definindo cálculo de porcentagem.
+pct <- round(x/sum(x)*100)
+lbls<- paste(pct, "%", sep = "")
+
+#Plotando gráfico do tipo Pizza.    
+pie(x, labels=lbls, main = "Gráfico com as categorias perdidas com maior frequência da bagagem:", col = rainbow(10), size=10)
+legend("toprigh", legend = labels, cex = 0.8, fill = rainbow(10))
+```
+
+
+```{r, warning=F, message=F, echo=F, fig.width = 10, fig.height = 6}
+categ<- projeto %>% count(`Item Category`)
+categ<-arrange(categ, desc(n))
+
+labels <- categ$`Item Category`[1:10]
+x <- categ$n[1:10]
+
+
+pct <- round(x/sum(x)*100)
+lbls<- paste(pct, "%", sep = "")
+    
+pie(x, labels=lbls, main = "Gráfico com as categorias perdidas com maior frequência da bagagem:", col = rainbow(10), size=10)
+legend("toprigh", legend = labels, cex = 0.8, fill = rainbow(10))
+
+```
+
+As categorias não identificadas ou que não se enquadravam em alguma outra categoria foram tratadas como “Other”, apesar de estar em maior parte do gráfico ela representa um conjunto de outras categorias.
+
+
+Para uma análise mais profunda e real podemos observar que a categoria de itens perdidos com maior frequência costuma ser de itens carregados à mão, bem como bolsas, estojos e bagagem de mão de pequeno porte, seguidos dos itens de vestuário que por serem de fácil dispersão acabam sendo esquecidos com mais frequência.
+
+
+Analisando esses dados deve-se emitir alertas de mais atenção e cuidado em relação a esses itens de fácil dispersão, buscando diminuir o índice geral de bagagens perdidas.
+
+
+
+## Período com maior frequência de perdas
+
+Podemos notar que a maior quantidade de perda de bagagem se encontra nos meses de dezembro e agosto, isso se deve a um grande número de viagens concentradas no período próximo ao Réveillon e também no período das férias escolares, nos quais o número de viagem aumenta consideravelmente, consequentemente acaba gerando mais perdas, logo, o cuidado deve ser redobrado nesses períodos, principalmente com objetos de fácil dispersão.
+
+```{r, warning=F, message=F, fig.width = 10, fig.height = 6}
+#Selecionando os meses com maior quantidade de incidentes.
+meses <- projeto %>% count(months.Date(projeto$`Incident Date`))
+meses <- arrange(meses, desc(n))
+
+labels <- meses[1:12,1]
+x <- meses$n
+
+#Plotando o gráfico do tipo barra.
+barplot(x, names.arg = labels, cex.names = 0.7, space = 0.6, beside = T, ylim = c(0, 1000), col = rainbow(12), main = "Gráfico de perdas de acordo com o mês que a bagagem foi perdida", xlab="Meses", ylab="Quantidade de Itens")
+```
+
+
+## Tipos de reclamação de maior frequência
+
+As reclamações de maior frequência dos passageiros que perdem sua bagagem são:
+
+&nbsp;
+1 – Perda de propriedade do passageiro, ou seja, o item foi perdido e o valor será ressarcido de acordo com o custo estimado do item.
+
+&nbsp;
+2 – Danos materiais, ou seja, houve avarias na bagagem, havendo possibilidades de reparação do item ou valor parcial ou total ressarcido ao cliente.
+
+&nbsp;
+3 – Ferimento pessoal, ou seja, itens com valores pessoais e sentimentais foram avariados ou “mal cuidados”, de        modo que gera um dano sem possibilidades de avaliação de custo para ressarcir.
+
+&nbsp;
+4 – Outros motivos
+
+```{r, warning=F, message=F, fig.width = 10, fig.height = 6}
+#Filtrando os tipos de reclamação e as que possuem maior incidência
+reclamacoes <- projeto %>% count(`Claim Type`)
+reclamacoes<-arrange(reclamacoes, desc(n))
+x<-reclamacoes$n
+labels <- reclamacoes$`Claim Type`
+reclamacoes$n[4]<-sum(reclamacoes$n[4:8])
+labels2 <- c("1 - Perda de propriedade do passageiro", "2 - Danos materiais", "3 - Ferimento pessoal", "4 - Outros motivos")
+
+#Plotando gráfico tipo barra e adicionando legenda.
+barplot(x[1:4], ylim = c(0,5000), beside = T, names.arg = labels[1:4], col = rainbow(4))
+legend("toprigh", legend = labels2, cex = 1, fill = rainbow(4))
+```
+
+
+## Sites com maior número de reclamação
+
+```{r, warning=F, message=F, fig.width = 10, fig.height = 6}
+#Lista de sites com maior número de reclamação
+sites <- projeto %>% count(`Claim Site`)
+sites<-arrange(sites, desc(n))
+x<-reclamacoes$n
+labels = sites$`Claim Site`
+sites$n[3]<-sum(sites$n[3:5])
+
+#Plotando gráfico pizza com legenda.
+pie(x[1:3], labels=lbls, main = "Gráfico com os sites de maior reclamação", col = c("red", "green", "blue"))
+legend("toprigh", legend = labels[1:3], cex = 0.8, fill = c("red", "green", "blue"))
+```
+
+
+# Conclusão: {.tabset}
+
+Por conseguinte, observa-se que com a exploração do dataset relacionado à perda de bagagens no ano de 2014 a partir de uma análise exploratória podemos obter um volume de dados interessante e extrair informações relevantes para possível manutenção de melhoria do serviço de recuperação e para emitir alertas aos passageiros em pontos cruciais.
+&nbsp;
+
+A limitação da variação de dados acabou encurtando a análise de modo que não foi possível gerar uma amplitude extensa dessa exploração e replicação dos dados, ademais, o dataset escolhido é um pouco antigo tendo em vista que esse ambiente possui mudanças de serviços constantemente, principalmente com automação dos serviços, porém ainda sim é possível extrair muitas informações relevantes tanto para o passageiro quanto para os fornecedores do serviço.
+&nbsp;
+
+Por fim, essa mesma análise de dados pode ser feita com dados mais recente e ser constantemente atualizada, ocasionando melhorias do serviço, impulsionando a parte financeira desse setor e trazendo melhorias para seus usuários.
+
